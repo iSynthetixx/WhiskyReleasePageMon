@@ -20,7 +20,10 @@ cd WhiskeyReleasePageMon
 
 # 2️⃣ Create a virtual environment (optional but recommended)
 python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
+# If on Linux
+source venv/bin/activate
+# On Windows use
+venv\Scripts\activate
 
 # 3️⃣ Install dependencies
 pip install -r requirements.txt
