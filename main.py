@@ -123,13 +123,15 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5):
         try:
             logging.debug(f"Fetching data from {url}... (Attempt {attempt + 1})")
             resp = session.get(url)
-            resp.raise_for_status()
-
-            try:
-                return resp.json()  # Ensure response is valid JSON
-            except ValueError:
-                logging.error(f"Failed to decode JSON response. Response Text: {resp.text}")
-                return None
+            # Check if the response status code is in the 2xx range (success)
+            if 200 <= resp.status_code < 300:
+                try:
+                    return resp.json()  # Ensure response is valid JSON
+                except ValueError:
+                    logging.error(f"Failed to decode JSON response. Response Text: {resp.text}")
+                    return None
+            else:
+                logging.error(f"Received non-success status code {resp.status_code}")
 
         except Exception as e:
             logging.error(f"Error fetching API data: {e}")
