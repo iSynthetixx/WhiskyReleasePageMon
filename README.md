@@ -30,6 +30,7 @@ echo "PRODUCT_URL=https://www.finewineandgoodspirits.com/api/products
 STOCK_URL=https://www.finewineandgoodspirits.com/api/stocks
 LOG_FILE_PATH=logs/app.log
 PROXY_FILE=proxies.txt" > .env
+```
 
 ## 🔧 Usage
 # Run the program
