@@ -111,9 +111,6 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backof
             elif resp.status_code == 503:  # Service Unavailable
                 logging.warning(f"Service unavailable (503). Retrying in {delay} seconds...")
                 time.sleep(delay)
-            elif resp.status_code == 429:  # Rate Limiting (Too Many Requests)
-                logging.warning(f"Rate limit reached (429). Retrying in {delay} seconds...")
-                time.sleep(delay)
             elif resp.status_code == 403:  # Forbidden
                 logging.error(f"Access forbidden (403). Check your proxy settings or permissions.")
                 break
@@ -136,6 +133,31 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backof
     return None
 
 
+def fetch_stock_data(session, product_data, stock_url):
+    """Fetches stock data for products based on product IDs in the product data."""
+    # Fetch stock data for products
+    product_ids = [item["id"] for item in product_data.get("items", [])]
+
+    if not product_ids:
+        logging.error("No valid Product IDs found in 'items'. Stock levels will be unavailable.")
+        return None  # Return None if no product IDs are available
+
+    logging.debug(f"Successfully parsed {len(product_ids)} Product IDs.")
+    stock_url_current = f"{stock_url},{','.join(product_ids)}"
+    stock_data = api_request(session, stock_url_current)
+
+    # Handle missing or malformed stock data
+    if stock_data is None:
+        logging.error("Failed to retrieve stock data!")
+        return None
+    elif not isinstance(stock_data.get("items"), list):
+        logging.error("No 'items' found in the stock data response or invalid format.")
+        return None
+
+    logging.debug("Stock data successfully retrieved.")
+    return stock_data
+
+
 def main():
     """Main function to fetch and process product data from the API."""
     start_time = time.time()
@@ -150,47 +172,39 @@ def main():
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
 
-    # Fetch stock data for products
-    product_ids = [item["id"] for item in product_data["items"]]
+    # Fetch stock data for products using the refactored function
+    stock_data = fetch_stock_data(session, product_data, stock_url)
 
-    if product_ids:
-        logging.debug("Successfully parsed Product ID's.")
-        stock_url_current = stock_url + ",".join(product_ids)
-        stock_data = api_request(session, stock_url_current)
-        if not stock_data:
-            logging.error("Failed to retrieve stock data!")
-        if "items" not in stock_data or not isinstance(stock_data["items"], list):
-            logging.error("No 'items' found in the stock data response or invalid format.")
-    else:
-        logging.error("No Product ID's parsed from 'items' or invalid format. Stock levels will be unavailable.")
-
-    # Process each item in the product data
-    for item in product_data["items"]:
-        try:
-            # Validate and transform the product data using ItemModel
-            new_product = ItemModel.model_validate(item)
+    if stock_data:
+        # Continue processing stock data
+        for item in product_data["items"]:
             try:
-                for index, dictionary in enumerate(stock_data["items"]):
-                    if new_product.id in dictionary:
-                        if "productSkuInventoryDetails" in dictionary and dictionary["productSkuInventoryDetails"]:
-                            new_product.__dict__.update(dictionary["productSkuInventoryDetails"][0])
-                        else:
-                            logging.warning(f"No inventory details found for product ID: {new_product.id}")
-                        break
+                # Validate and transform the product data using ItemModel
+                new_product = ItemModel.model_validate(item)
+                try:
+                    for index, dictionary in enumerate(stock_data["items"]):
+                        if new_product.id in dictionary:
+                            if "productSkuInventoryDetails" in dictionary and dictionary["productSkuInventoryDetails"]:
+                                new_product.__dict__.update(dictionary["productSkuInventoryDetails"][0])
+                            else:
+                                logging.warning(f"No inventory details found for product ID: {new_product.id}")
+                            break
+                except ValidationError as e:
+                    logging.error(f"Error parsing stock levels: {e}")
+                    continue
+                # Append the validated product to the product list
+                product_list.append(new_product)
             except ValidationError as e:
-                logging.error(f"Error parsing stock levels: {e}")
+                logging.error(f"Error parsing item: {e}")
                 continue
-            # Append the validated product to the product list
-            product_list.append(new_product)
-        except ValidationError as e:
-            logging.error(f"Error parsing item: {e}")
-            continue
 
-    # Store the products in the database
-    try:
-        store_products_to_db(product_list)
-    except Exception as e:
-        logging.error(f"Error storing products in the database: {e}")
+        # Store the products in the database
+        try:
+            store_products_to_db(product_list)
+        except Exception as e:
+            logging.error(f"Error storing products in the database: {e}")
+    else:
+        logging.error("Stock data is unavailable.")
 
     # End time tracking and print the execution time
     end_time = time.time()
