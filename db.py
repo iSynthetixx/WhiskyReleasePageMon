@@ -108,7 +108,8 @@ def update_or_insert_product(product):
                     f"🔗 [View Product]({product.url})"
                 )
 
-                send_telegram_message(message)
+                # Sends a telegram message to the group chat
+                send_telegram_message(message, TELEGRAM_GROUP_CHAT_ID)
                 logging.info(f"New product added: {product.displayName}")
 
             elif product_status == "changed":
