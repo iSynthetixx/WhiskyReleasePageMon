@@ -194,22 +194,23 @@ def main():
     initialize_db()
     session = create_session()
     product_list = []
+
+    # Make the API request and directly handle the response
     product_data = api_request(session, product_url)
 
-    # Ensure "items" key exists in the response and is a list type and is not empty or None
-    if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
+    # Extract and validate "items", then create product objects in one go
+    avavilable_items = product_data.get("items", [])
+    if not avavilable_items:
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
 
-    # Create the new_product objects first before fetching stock data
-    for item in product_data["items"]:
+    # Validate and transform product data, and store in product_list
+    for item in avavilable_items:
         try:
-            # Validate and transform the product data using ItemModel
-            new_product = ItemModel.model_validate(item)
-            product_list.append(new_product)  # Store the product for later use with stock data
+            # Validate and transform the product data using ItemModel, and append directly
+            product_list.append(ItemModel.model_validate(item))
         except ValidationError as e:
             logging.error(f"Error parsing item: {e}")
-            continue
 
     # Fetch stock data for products returned from API query of specific page
     stock_data = fetch_stock_data(session, product_data, stock_url)
