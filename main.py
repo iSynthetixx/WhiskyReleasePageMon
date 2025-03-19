@@ -43,29 +43,11 @@ def initialize_logging():
     logging.basicConfig(level=logging.INFO, handlers=[console_handler, file_handler])
 
 
-# Proxy validation functions
-def check_proxy(proxy):
-    """Checks if the given proxy is working."""
-    try:
-        response = requests.get('https://httpbin.org/ip', proxies={"http": proxy, "https": proxy}, timeout=10)
-        if response.status_code == 200:
-            return True
-        else:
-            logging.warning(f"Proxy {proxy} failed with status code {response.status_code}")
-    except requests.RequestException as e:
-        logging.error(f"Error with proxy {proxy}: {e}")
-    return False
+def handle_proxies(file_path):
+    """Handles loading, validating, and saving proxies."""
+    valid_proxies = []
 
-
-def save_proxies_to_file(file_path, proxies):
-    """Saves the list of proxies back to the .txt file."""
-    with open(file_path, 'w') as f:
-        for proxy in proxies:
-            f.write(f"{proxy}\n")
-
-
-def get_valid_proxies(file_path):
-    """Loads proxies from a file, validates them, and returns only the working ones."""
+    # Load proxies from the file
     try:
         with open(file_path, 'r') as f:
             proxies = [line.strip() for line in f.readlines() if line.strip()]
@@ -73,14 +55,24 @@ def get_valid_proxies(file_path):
         logging.error(f"Proxy file {file_path} not found.")
         return []
 
-    valid_proxies = [proxy for proxy in proxies if check_proxy(proxy)]
+    # Validate each proxy
+    for proxy in proxies:
+        try:
+            response = requests.get('https://httpbin.org/ip', proxies={"http": proxy, "https": proxy}, timeout=10)
+            if response.status_code == 200:
+                valid_proxies.append(proxy)
+            else:
+                logging.warning(f"Proxy {proxy} failed with status code {response.status_code}")
+        except requests.RequestException as e:
+            logging.error(f"Error with proxy {proxy}: {e}")
 
-    # Save only the working proxies back to the file
+    # Save only the valid proxies back to the file
     with open(file_path, 'w') as f:
         for proxy in valid_proxies:
             f.write(f"{proxy}\n")
 
     logging.info(f"Proxy file updated. {len(valid_proxies)} valid proxies remaining.")
+
     return valid_proxies
 
 
@@ -92,7 +84,7 @@ def create_session():
         logging.warning("PROXY_FILE environment variable is not set. Running without a proxy.")
         return session
 
-    proxies = get_valid_proxies(proxy_file_path)
+    proxies = handle_proxies(proxy_file_path)
 
     if proxies:
         session.proxies.update({"http": proxies[0], "https": proxies[0]})
