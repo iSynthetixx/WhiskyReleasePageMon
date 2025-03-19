@@ -90,23 +90,17 @@ def validate_and_clean_proxies(proxy_file_path):
     logging.info(f"Proxy file updated. {len(valid_proxies)} valid proxies remaining.")
 
 
-def load_proxies_from_env():
-    """Validate and load proxies from the environment-defined proxy file."""
-    if not proxy_file_path:
-        logging.error("PROXY_FILE environment variable is not set.")
-        return []
-
-    validate_and_clean_proxies(proxy_file_path)
-    return load_proxies_from_file(proxy_file_path)
-
-
-# Create a session with TLS client
 def create_session():
     """Creates a session with TLS client and configures proxy."""
     session = tls_client.Session(client_identifier="chrome_120", random_tls_extension_order=True)
 
-    # Get the proxies list from the cleaned proxies file
-    proxies = load_proxies_from_env()
+    if not proxy_file_path:
+        logging.error("PROXY_FILE environment variable is not set. Running without a proxy.")
+        return session
+
+    # Validate and clean proxies before loading them
+    validate_and_clean_proxies(proxy_file_path)
+    proxies = load_proxies_from_file(proxy_file_path)
 
     if proxies:
         proxy = proxies[0]  # Use the first valid proxy
@@ -149,14 +143,10 @@ def main():
     start_time = time.time()
     initialize_logging()
     initialize_db()
-    product_list = []
     session = create_session()
+    product_list = []
     product_data = api_request(session, product_url)
 
-    # Checks that product_data isnt empty or None
-    if not product_data:
-        logging.error("Failed to retrieve data. Exiting...")
-        return
 
     # Ensure "items" key exists in the response and is a list type and is not empty or None
     if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
