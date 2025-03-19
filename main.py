@@ -199,15 +199,15 @@ def main():
     product_data = api_request(session, product_url)
 
     # Extract and validate "items", then create product objects in one go
-    avavilable_items = product_data.get("items", [])
-    if not avavilable_items:
+    available_items = product_data.get("items")
+    if not available_items:
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
 
     # Validate and transform product data, and store in product_list
-    for item in avavilable_items:
+    for item in available_items:
         try:
-            # Validate and transform the product data using ItemModel, and append directly
+            # Directly validate and append the product data
             product_list.append(ItemModel.model_validate(item))
         except ValidationError as e:
             logging.error(f"Error parsing item: {e}")
@@ -219,9 +219,9 @@ def main():
     process_products_with_or_without_stock_data(product_list, stock_data)
 
     # End time tracking and print the execution time
-    end_time = time.time()
-    elapsed_time = end_time - start_time
+    elapsed_time = time.time() - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
+
 
 
 
