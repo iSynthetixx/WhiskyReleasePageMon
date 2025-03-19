@@ -1,14 +1,14 @@
 # 🍾 WhiskeyReleasePageMon
 
-A powerful Python-based scraper that fetches product and stock data from the **Fine Wine & Good Spirits** website. This project supports proxy rotation, logging, and API request retries to ensure reliable data retrieval.
+A powerful Python-based scraper that fetches the current available products and stock data from the **REDACTED** Whiskey Release page. The currently available product information is then stored to a local SQLite database and compared agaisnt for updates each time the program executes. This project supports proxy rotation, logging, and API request retries to ensure reliable data retrieval.
 
 ## 🚀 Features
 
-- ✅ **Proxy Support** – Loads and validates proxies from a file before use  
-- ✅ **TLS Client Integration** – Uses `tls_client` for enhanced request security  
-- ✅ **Robust Logging** – Logs events to both console and a rotating log file  
-- ✅ **Environment Configuration** – `.env` file support for API URLs and proxy settings  
-- ✅ **Automatic Proxy Cleaning** – Removes dead proxies to improve performance  
+- ✅ **Proxy Support** – Loads and validates proxies from a file before use
+- ✅ **TLS Client Integration** – Uses `tls_client` for enhanced request security
+- ✅ **Robust Logging** – Logs events to both console and a rotating log file
+- ✅ **Environment Configuration** – `.env` file support for API URLs and proxy settings
+- ✅ **Automatic Proxy Cleaning** – Removes dead proxies to improve performance
 - ✅ **Error Handling & Retries** – Ensures smooth API calls with automatic retries  
 
 ## 📦 Installation
@@ -29,11 +29,7 @@ venv\Scripts\activate
 pip install -r requirements.txt
 
 # 4️⃣ Create a .env file and configure your environment variables
-echo "PRODUCT_URL=https://www.finewineandgoodspirits.com/api/products
-STOCK_URL=https://www.finewineandgoodspirits.com/api/stocks
-LOG_FILE_PATH=logs/app.log
-PROXY_FILE=proxies.txt" > .env
-```
+
 
 ## 🔧 Usage
 # Run the program
@@ -55,9 +51,7 @@ Proxy rotation settings
 Logging behavior
 
 ## 🏗 Future Enhancements
-🔄 Multi-threaded proxy handling
-📊 Export data to CSV or JSON
-🚀 Docker support for deployment
+🔄 TBD
 
 ## 📜 License
 This project is licensed under the MIT License, meaning you can use, modify, and distribute it, even for commercial purposes.
