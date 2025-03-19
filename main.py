@@ -10,7 +10,6 @@ from models import ItemModel
 import requests
 from db import *
 
-
 # Load environment variables from .env file
 load_dotenv()
 # Access the environment variables
@@ -111,6 +110,9 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backof
                     return None
             elif resp.status_code == 503:  # Service Unavailable
                 logging.warning(f"Service unavailable (503). Retrying in {delay} seconds...")
+                time.sleep(delay)
+            elif resp.status_code == 429:  # Rate Limiting (Too Many Requests)
+                logging.warning(f"Rate limit reached (429). Retrying in {delay} seconds...")
                 time.sleep(delay)
             elif resp.status_code == 403:  # Forbidden
                 logging.error(f"Access forbidden (403). Check your proxy settings or permissions.")
