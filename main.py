@@ -13,7 +13,6 @@ from db import *
 
 # Load environment variables from .env file
 load_dotenv()
-
 # Access the environment variables
 product_url = os.getenv("PRODUCT_URL")
 stock_url = os.getenv("STOCK_URL")
