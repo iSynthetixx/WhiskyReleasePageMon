@@ -159,34 +159,8 @@ def fetch_stock_data(session, product_data, stock_url):
     logging.debug("Stock data successfully retrieved.")
     return stock_data
 
-
-def main():
-    """Main function to fetch and process product data from the API."""
-    start_time = time.time()
-    initialize_logging()
-    initialize_db()
-    session = create_session()
-    product_list = []
-    product_data = api_request(session, product_url)
-
-    # Ensure "items" key exists in the response and is a list type and is not empty or None
-    if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
-        logging.warning("No 'items' found in the product data response or invalid format.")
-        return
-
-    # Create the new_product objects based on what's current found
-    for item in product_data["items"]:
-        try:
-            # Validate and transform the product data using ItemModel
-            new_product = ItemModel.model_validate(item)
-            product_list.append(new_product)  # Store the product for later use with stock data
-        except ValidationError as e:
-            logging.error(f"Error parsing item: {e}")
-            continue
-
-    # Try and Fetch stock data for current products using a seperate API
-    stock_data = fetch_stock_data(session, product_data, stock_url)
-
+def process_products_with_or_without_stock_data(product_list, stock_data):
+    """Process products and match them with stock data if available."""
     if stock_data:
         # Continue processing stock data
         for new_product in product_list:
@@ -203,18 +177,51 @@ def main():
                 logging.error(f"Error parsing stock levels: {e}")
                 continue
 
-        # Store the products in the database
-        try:
-            store_products_to_db(product_list)
-        except Exception as e:
-            logging.error(f"Error storing products in the database: {e}")
     else:
-        logging.error("Stock data is unavailable.")
+        logging.warning("Stock data is unavailable, proceeding with available product data only.")
+
+    # Store the products in the database
+    try:
+        store_products_to_db(product_list)
+    except Exception as e:
+        logging.error(f"Error storing products in the database: {e}")
+
+
+def main():
+    """Main function to fetch and process product data from the API."""
+    start_time = time.time()
+    initialize_logging()
+    initialize_db()
+    session = create_session()
+    product_list = []
+    product_data = api_request(session, product_url)
+
+    # Ensure "items" key exists in the response and is a list type and is not empty or None
+    if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
+        logging.warning("No 'items' found in the product data response or invalid format.")
+        return
+
+    # Create the new_product objects first before fetching stock data
+    for item in product_data["items"]:
+        try:
+            # Validate and transform the product data using ItemModel
+            new_product = ItemModel.model_validate(item)
+            product_list.append(new_product)  # Store the product for later use with stock data
+        except ValidationError as e:
+            logging.error(f"Error parsing item: {e}")
+            continue
+
+    # Fetch stock data for products using the refactored function
+    stock_data = fetch_stock_data(session, product_data, stock_url)
+
+    # Process products with or without stock data
+    process_products_with_or_without_stock_data(product_list, stock_data)
 
     # End time tracking and print the execution time
     end_time = time.time()
     elapsed_time = end_time - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
+
 
 
 
