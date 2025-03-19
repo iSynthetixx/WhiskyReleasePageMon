@@ -135,6 +135,8 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backof
 
 def fetch_stock_data(session, product_data, stock_url):
     """Fetches stock data for products based on product IDs in the product data."""
+    """product data is a json response from the api."""
+
     # Fetch stock data for products
     product_ids = [item["id"] for item in product_data.get("items", [])]
 
@@ -175,6 +177,7 @@ def main():
     # Fetch stock data for products using the refactored function
     stock_data = fetch_stock_data(session, product_data, stock_url)
 
+    # Verifies valid stock data
     if stock_data:
         # Continue processing stock data
         for item in product_data["items"]:
