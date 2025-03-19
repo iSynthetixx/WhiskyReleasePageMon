@@ -18,10 +18,7 @@ PRODUCT_URL = os.getenv("PRODUCT_URL")
 STOCK_URL = os.getenv("STOCK_URL")
 LOG_FILE_PATH = os.getenv("LOG_FILE_PATH")
 PROXY_FILE_PATH = os.getenv("PROXY_FILE_PATH")
-# Telegram Bot Token and Chat ID
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_BOT_USER_NAME = os.getenv("TELEGRAM_BOT_USER_NAME")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 # Initialize the Telegram Bot
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 # tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
@@ -195,14 +192,6 @@ def process_products_with_or_without_stock_data(product_list, stock_data):
         store_products_to_db(product_list)
     except Exception as e:
         logging.error(f"Error storing products in the database: {e}")
-
-
-def send_telegram_message(message):
-    """Sends a message to the specified Telegram chat."""
-    try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    except Exception as e:
-        logging.error(f"Error sending message to Telegram: {e}")
 
 
 def main():

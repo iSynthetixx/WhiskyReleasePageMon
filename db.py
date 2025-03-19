@@ -2,6 +2,7 @@ import sqlite3
 import logging
 import os
 from dotenv import load_dotenv
+from telegram_utils import *
 
 load_dotenv()  # Load the .env file
 base_url = os.getenv("BASE_URL", "https://www.google.com")
@@ -9,136 +10,130 @@ base_url = os.getenv("BASE_URL", "https://www.google.com")
 
 def initialize_db():
     """Initializes the SQLite database and creates the necessary table if it doesn't exist."""
+    try:
+        with sqlite3.connect('products.db') as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                brand TEXT,
+                displayName TEXT,
+                inStockQuantity INTEGER,
+                orderableQuantity INTEGER,
+                listPrice REAL,
+                b2c_proof TEXT,
+                b2c_size TEXT,
+                stockStatus TEXT,
+                lastModifiedDate TEXT,
+                shippable BOOLEAN,
+                active BOOLEAN,
+                b2c_upc TEXT,
+                primaryFullImageURL TEXT,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            conn.commit()
+        logging.info("Database initialized successfully.")
+    except sqlite3.Error as e:
+        logging.error(f"Error initializing database: {e}")
+
+
+def has_product_changed(product):
+    """Checks if the product is new, unchanged, or changed in the database."""
     with sqlite3.connect('products.db') as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS products (
-            id TEXT PRIMARY KEY,
-            brand TEXT,
-            displayName TEXT,
-            inStockQuantity INTEGER,
-            orderableQuantity INTEGER,
-            listPrice REAL,
-            b2c_proof TEXT,
-            b2c_size TEXT,
-            stockStatus TEXT,
-            lastModifiedDate TEXT,
-            shippable BOOLEAN,
-            active BOOLEAN,
-            b2c_upc TEXT,
-            primaryFullImageURL TEXT,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        conn.commit()
+        SELECT brand, displayName, inStockQuantity, orderableQuantity, listPrice, 
+               b2c_proof, b2c_size, stockStatus, lastModifiedDate, 
+               shippable, active, b2c_upc, primaryFullImageURL
+        FROM products WHERE id = ?
+        """, (product.id,))
 
-
-def has_product_changed(product):
-    """Checks if the product values have changed by comparing with the database."""
-    with sqlite3.connect('products.db') as conn:
-        cursor = conn.cursor()
-
-        # Use id to find the product in the database
-        cursor.execute("SELECT * FROM products WHERE id = ?", (product.id,))
         existing_product = cursor.fetchone()
 
-        if existing_product:
-            existing_data = {
-                "id": existing_product[0],
-                "brand": existing_product[1],
-                "displayName": existing_product[2],
-                "inStockQuantity": existing_product[3],
-                "orderableQuantity": existing_product[4],
-                "listPrice": existing_product[5],
-                "b2c_proof": existing_product[6],
-                "b2c_size": existing_product[7],
-                "stockStatus": existing_product[8],
-                "lastModifiedDate": existing_product[9],
-                "shippable": existing_product[10],
-                "active": existing_product[11],
-                "b2c_upc": existing_product[12],
-                "primaryFullImageURL": existing_product[13],
-            }
+        if existing_product is None:
+            return "new"
 
-            list_of_changes = []
-            for key, value in existing_data.items():
-                # Default to None if the attribute does not exist
-                product_value = getattr(product, key, None)
-                # Compare the values
-                if value != product_value:
-                    logging.info(f"Product attribute: {key} for {product.displayName} has been updated.")
-                    logging.info(f"Previous: {value}, Current: {product_value}.")
-                    list_of_changes.append(f"Attribute {key} changed: {value} -> {product_value}")
+        # Convert tuple to dictionary
+        existing_data = dict(zip(
+            ["brand", "displayName", "inStockQuantity", "orderableQuantity", "listPrice",
+             "b2c_proof", "b2c_size", "stockStatus", "lastModifiedDate",
+             "shippable", "active", "b2c_upc", "primaryFullImageURL"], existing_product
+        ))
 
-            if list_of_changes:
-                # Print the changes if any
-                logging.info(f"Changes detected in product {product.displayName}:")
-                for change in list_of_changes:
-                    logging.info(change)
-                # Product has changed
-                return True
+        for key, value in existing_data.items():
+            if value != getattr(product, key, None):
+                return "changed"
 
-        else:
-            # Product is new
-            return True
-
-    # No changes
-    return False
+        return "no_change"
 
 
 def update_or_insert_product(product):
-    """Updates an existing product or inserts a new one into the database."""
-    with sqlite3.connect('products.db') as conn:
-        cursor = conn.cursor()
+    """Inserts a new product or updates an existing one in the database if changes are detected."""
+    try:
+        with sqlite3.connect('products.db') as conn:
+            cursor = conn.cursor()
 
-        # Prepend the base URL to the primary image URL if it's not already prepended
-        if product.primaryFullImageURL and not product.primaryFullImageURL.startswith(base_url):
-            product.primaryFullImageURL = base_url + product.primaryFullImageURL
+            if product.primaryFullImageURL and not product.primaryFullImageURL.startswith(base_url):
+                product.primaryFullImageURL = base_url + product.primaryFullImageURL
 
-        # Set default values if attributes are not available
-        product.brand = getattr(product, 'brand', "Unknown Brand")
-        product.displayName = getattr(product, 'displayName', "Unknown Product")
-        product.inStockQuantity = getattr(product, 'inStockQuantity', 0)
-        product.orderableQuantity = getattr(product, 'orderableQuantity', 0)
-        product.listPrice = getattr(product, 'listPrice', 0.0)
-        product.b2c_proof = getattr(product, 'b2c_proof', "Unknown")
-        product.b2c_size = getattr(product, 'b2c_size', "Unknown")
-        product.stockStatus = getattr(product, 'stockStatus', "Unknown")
-        product.lastModifiedDate = getattr(product, 'lastModifiedDate', "Unknown")
-        product.shippable = getattr(product, 'shippable', False)
-        product.active = getattr(product, 'active', True)
-        product.b2c_upc = getattr(product, 'b2c_upc', "Unknown")
+            product_status = has_product_changed(product)
 
-        # Use id as the key to check if the product already exists
-        if has_product_changed(product):
-            cursor.execute("""
-            INSERT OR REPLACE INTO products (
-                id, brand, displayName, inStockQuantity, orderableQuantity, listPrice, 
-                b2c_proof, b2c_size, stockStatus, lastModifiedDate, 
-                shippable, active, b2c_upc, primaryFullImageURL
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                product.id,
-                product.brand,
-                product.displayName,
-                product.inStockQuantity,
-                product.orderableQuantity,
-                product.listPrice,
-                product.b2c_proof,
-                product.b2c_size,
-                product.stockStatus,
-                product.lastModifiedDate,
-                product.shippable,
-                product.active,
-                product.b2c_upc,
-                product.primaryFullImageURL
-            ))
+            if product_status == "new":
+                cursor.execute("""
+                INSERT INTO products (
+                    id, brand, displayName, inStockQuantity, orderableQuantity, listPrice, 
+                    b2c_proof, b2c_size, stockStatus, lastModifiedDate, 
+                    shippable, active, b2c_upc, primaryFullImageURL
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    product.id, product.brand, product.displayName, product.inStockQuantity,
+                    product.orderableQuantity, product.listPrice, product.b2c_proof,
+                    product.b2c_size, product.stockStatus, product.lastModifiedDate,
+                    product.shippable, product.active, product.b2c_upc, product.primaryFullImageURL
+                ))
+                conn.commit()
 
-            conn.commit()
-            logging.info(f"Product: {product.displayName} has been inserted/updated in the database.")
-        else:
-            logging.info(f"Product: {product.displayName} has not changed, no update required.")
+                message = (
+                    f"🆕 *New Product Added!*\n"
+                    f"📌 *{product.displayName}*\n"
+                    f"🏷️ Brand: {product.brand}\n"
+                    f"📦 In Stock: {product.inStockQuantity}\n"
+                    f"💰 Price: ${product.listPrice}\n"
+                    f"🛒 Orderable Quantity: {product.orderableQuantity}\n"
+                    f"🔗 [View Product]({product.primaryFullImageURL})"
+                )
+
+                send_telegram_message(message)
+                logging.info(f"New product added: {product.displayName}")
+
+
+            elif product_status == "changed":
+                cursor.execute("""
+                UPDATE products SET
+                    brand = ?, displayName = ?, inStockQuantity = ?, orderableQuantity = ?, 
+                    listPrice = ?, b2c_proof = ?, b2c_size = ?, stockStatus = ?, 
+                    lastModifiedDate = ?, shippable = ?, active = ?, b2c_upc = ?, 
+                    primaryFullImageURL = ? WHERE id = ?
+                """, (
+                    product.brand, product.displayName, product.inStockQuantity,
+                    product.orderableQuantity, product.listPrice, product.b2c_proof,
+                    product.b2c_size, product.stockStatus, product.lastModifiedDate,
+                    product.shippable, product.active, product.b2c_upc,
+                    product.primaryFullImageURL, product.id
+                ))
+                conn.commit()
+                logging.info(f"Updated product: {product.displayName}")
+
+            else:
+                logging.info(f"No changes detected for product: {product.displayName}. Skipping update.")
+
+    except sqlite3.Error as e:
+        logging.error(f"Database error while updating product {product.displayName}: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error in update_or_insert_product: {e}")
 
 
 def store_products_to_db(product_list):
