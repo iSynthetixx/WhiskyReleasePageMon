@@ -206,10 +206,11 @@ def main():
         return
 
     # Validate, transform product data, and store them in product_list
-    product_list = [
-        ItemModel.model_validate(item)
-        for item in available_items if ItemModel.model_validate(item) is not None
-    ]
+    product_list = []
+    for item in available_items:
+        validated_product = ItemModel.model_validate(item)
+        if validated_product is not None:
+            product_list.append(validated_product)
 
     # Fetch stock data for products returned from API query of specific page
     stock_data = fetch_stock_data(session, product_data, stock_url)
