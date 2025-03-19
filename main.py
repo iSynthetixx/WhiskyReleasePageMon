@@ -174,31 +174,33 @@ def main():
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
 
-    # Fetch stock data for products using the refactored function
+    # Create the new_product objects based on what's current found
+    for item in product_data["items"]:
+        try:
+            # Validate and transform the product data using ItemModel
+            new_product = ItemModel.model_validate(item)
+            product_list.append(new_product)  # Store the product for later use with stock data
+        except ValidationError as e:
+            logging.error(f"Error parsing item: {e}")
+            continue
+
+    # Try and Fetch stock data for current products using a seperate API
     stock_data = fetch_stock_data(session, product_data, stock_url)
 
-    # Verifies valid stock data
     if stock_data:
         # Continue processing stock data
-        for item in product_data["items"]:
+        for new_product in product_list:
             try:
-                # Validate and transform the product data using ItemModel
-                new_product = ItemModel.model_validate(item)
-                try:
-                    for index, dictionary in enumerate(stock_data["items"]):
-                        if new_product.id in dictionary:
-                            if "productSkuInventoryDetails" in dictionary and dictionary["productSkuInventoryDetails"]:
-                                new_product.__dict__.update(dictionary["productSkuInventoryDetails"][0])
-                            else:
-                                logging.warning(f"No inventory details found for product ID: {new_product.id}")
-                            break
-                except ValidationError as e:
-                    logging.error(f"Error parsing stock levels: {e}")
-                    continue
-                # Append the validated product to the product list
-                product_list.append(new_product)
+                # Match each product with stock data
+                for stock_item in stock_data.get("items", []):
+                    if new_product.id in stock_item:
+                        if "productSkuInventoryDetails" in stock_item and stock_item["productSkuInventoryDetails"]:
+                            new_product.__dict__.update(stock_item["productSkuInventoryDetails"][0])
+                        else:
+                            logging.warning(f"No inventory details found for product ID: {new_product.id}")
+                        break
             except ValidationError as e:
-                logging.error(f"Error parsing item: {e}")
+                logging.error(f"Error parsing stock levels: {e}")
                 continue
 
         # Store the products in the database
@@ -213,6 +215,7 @@ def main():
     end_time = time.time()
     elapsed_time = end_time - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
+
 
 
 if __name__ == "__main__":
