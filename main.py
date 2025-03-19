@@ -153,11 +153,12 @@ def main():
     session = create_session()
     product_data = api_request(session, product_url)
 
+    # Checks that product_data isnt empty or None
     if not product_data:
         logging.error("Failed to retrieve data. Exiting...")
         return
 
-    # Ensure "items" key exists in the response
+    # Ensure "items" key exists in the response and is a list type and is not empty or None
     if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
@@ -176,30 +177,28 @@ def main():
     else:
         logging.error("No Product ID's parsed from 'items' or invalid format. Stock levels will be unavailable.")
 
-    if not product_data["items"]:
-        logging.warning("List of items from API returned empty.")
-    else:
-        # Process each item in the product data
-        for item in product_data["items"]:
+
+    # Process each item in the product data
+    for item in product_data["items"]:
+        try:
+            # Validate and transform the product data using ItemModel
+            new_product = ItemModel.model_validate(item)
             try:
-                # Validate and transform the product data using ItemModel
-                new_product = ItemModel.model_validate(item)
-                try:
-                    for index, dictionary in enumerate(stock_data["items"]):
-                        if new_product.id in dictionary:
-                            if "productSkuInventoryDetails" in dictionary and dictionary["productSkuInventoryDetails"]:
-                                new_product.__dict__.update(dictionary["productSkuInventoryDetails"][0])
-                            else:
-                                logging.warning(f"No inventory details found for product ID: {new_product.id}")
-                            break
-                except ValidationError as e:
-                    logging.error(f"Error parsing stock levels: {e}")
-                    continue
-                # Append the validated product to the product list
-                product_list.append(new_product)
+                for index, dictionary in enumerate(stock_data["items"]):
+                    if new_product.id in dictionary:
+                        if "productSkuInventoryDetails" in dictionary and dictionary["productSkuInventoryDetails"]:
+                            new_product.__dict__.update(dictionary["productSkuInventoryDetails"][0])
+                        else:
+                            logging.warning(f"No inventory details found for product ID: {new_product.id}")
+                        break
             except ValidationError as e:
-                logging.error(f"Error parsing item: {e}")
+                logging.error(f"Error parsing stock levels: {e}")
                 continue
+            # Append the validated product to the product list
+            product_list.append(new_product)
+        except ValidationError as e:
+            logging.error(f"Error parsing item: {e}")
+            continue
 
     # Store the products in the database
     store_products_to_db(product_list)
