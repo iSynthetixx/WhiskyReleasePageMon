@@ -63,8 +63,10 @@ def has_product_changed(product):
 
             list_of_changes = []
             for key, value in existing_data.items():
-                product_value = getattr(product, key, None)  # Default to None if the attribute does not exist
-                if value != product_value:  # Compare the values
+                # Default to None if the attribute does not exist
+                product_value = getattr(product, key, None)
+                # Compare the values
+                if value != product_value:
                     logging.info(f"Product attribute: {key} for {product.displayName} has been updated.")
                     logging.info(f"Previous: {value}, Current: {product_value}.")
                     list_of_changes.append(f"Attribute {key} changed: {value} -> {product_value}")
@@ -74,12 +76,15 @@ def has_product_changed(product):
                 logging.info(f"Changes detected in product {product.displayName}:")
                 for change in list_of_changes:
                     logging.info(change)
-                return True  # Product has changed
+                # Product has changed
+                return True
 
         else:
-            return True  # Product is new
+            # Product is new
+            return True
 
-    return False  # No changes
+    # No changes
+    return False
 
 
 def update_or_insert_product(product):
@@ -90,6 +95,20 @@ def update_or_insert_product(product):
         # Prepend the base URL to the primary image URL if it's not already prepended
         if product.primaryFullImageURL and not product.primaryFullImageURL.startswith(base_url):
             product.primaryFullImageURL = base_url + product.primaryFullImageURL
+
+        # Set default values if attributes are not available
+        product.brand = getattr(product, 'brand', "Unknown Brand")
+        product.displayName = getattr(product, 'displayName', "Unknown Product")
+        product.inStockQuantity = getattr(product, 'inStockQuantity', 0)
+        product.orderableQuantity = getattr(product, 'orderableQuantity', 0)
+        product.listPrice = getattr(product, 'listPrice', 0.0)
+        product.b2c_proof = getattr(product, 'b2c_proof', "Unknown")
+        product.b2c_size = getattr(product, 'b2c_size', "Unknown")
+        product.stockStatus = getattr(product, 'stockStatus', "Unknown")
+        product.lastModifiedDate = getattr(product, 'lastModifiedDate', "Unknown")
+        product.shippable = getattr(product, 'shippable', False)
+        product.active = getattr(product, 'active', True)
+        product.b2c_upc = getattr(product, 'b2c_upc', "Unknown")
 
         # Use id as the key to check if the product already exists
         if has_product_changed(product):

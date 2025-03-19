@@ -211,10 +211,10 @@ def main():
             logging.error(f"Error parsing item: {e}")
             continue
 
-    # Fetch stock data for products using the refactored function
+    # Fetch stock data for products returned from API query of specific page
     stock_data = fetch_stock_data(session, product_data, stock_url)
 
-    # Process products with or without stock data
+    # Process products and stores them to the database with or without stock data
     process_products_with_or_without_stock_data(product_list, stock_data)
 
     # End time tracking and print the execution time
