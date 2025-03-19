@@ -192,25 +192,24 @@ def main():
     start_time = time.time()
     initialize_logging()
     initialize_db()
+
+    # Create the session and handle the API request, including validation and transformation in one step
     session = create_session()
-    product_list = []
 
     # Make the API request and directly handle the response
     product_data = api_request(session, product_url)
 
-    # Extract and validate "items", then create product objects in one go
+    # Extract and validate "items", and process product data in one go
     available_items = product_data.get("items")
     if not available_items:
         logging.warning("No 'items' found in the product data response or invalid format.")
         return
 
-    # Validate and transform product data, and store in product_list
-    for item in available_items:
-        try:
-            # Directly validate and append the product data
-            product_list.append(ItemModel.model_validate(item))
-        except ValidationError as e:
-            logging.error(f"Error parsing item: {e}")
+    # Validate, transform product data, and store them in product_list
+    product_list = [
+        ItemModel.model_validate(item)
+        for item in available_items if ItemModel.model_validate(item) is not None
+    ]
 
     # Fetch stock data for products returned from API query of specific page
     stock_data = fetch_stock_data(session, product_data, stock_url)
@@ -221,9 +220,6 @@ def main():
     # End time tracking and print the execution time
     elapsed_time = time.time() - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
-
-
-
 
 
 if __name__ == "__main__":
