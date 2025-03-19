@@ -9,19 +9,28 @@ from pydantic import ValidationError
 from models import ItemModel
 import requests
 from db import *
+from telegram import Bot
 
 # Load environment variables from .env file
 load_dotenv()
 # Access the environment variables
-product_url = os.getenv("PRODUCT_URL")
-stock_url = os.getenv("STOCK_URL")
-log_file_path = os.getenv("LOG_FILE_PATH")
-proxy_file_path = os.getenv("PROXY_FILE")
+PRODUCT_URL = os.getenv("PRODUCT_URL")
+STOCK_URL = os.getenv("STOCK_URL")
+LOG_FILE_PATH = os.getenv("LOG_FILE_PATH")
+PROXY_FILE_PATH = os.getenv("PROXY_FILE_PATH")
+# Telegram Bot Token and Chat ID
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_USER_NAME = os.getenv("TELEGRAM_BOT_USER_NAME")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# Initialize the Telegram Bot
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
+# tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+# tmp = requests.get(tmp_url).json()
 
 
 def initialize_logging():
     """Configures the logging setup to log to both console and file with rotation."""
-    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
     log_formatter = colorlog.ColoredFormatter(
         "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
         log_colors={
@@ -36,7 +45,7 @@ def initialize_logging():
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
     file_handler = RotatingFileHandler(
-        log_file_path, maxBytes=10 * 1024 * 1024, backupCount=5
+        LOG_FILE_PATH, maxBytes=10 * 1024 * 1024, backupCount=5
     )
     file_handler.setFormatter(log_formatter)
     logging.basicConfig(level=logging.INFO, handlers=[console_handler, file_handler])
@@ -79,11 +88,11 @@ def create_session():
     """Creates a session with TLS client and configures proxy if available."""
     session = tls_client.Session(client_identifier="chrome_120", random_tls_extension_order=True)
 
-    if not proxy_file_path:
+    if not PROXY_FILE_PATH:
         logging.warning("PROXY_FILE environment variable is not set. Running without a proxy.")
         return session
 
-    proxies = handle_proxies(proxy_file_path)
+    proxies = handle_proxies(PROXY_FILE_PATH)
 
     if proxies:
         session.proxies.update({"http": proxies[0], "https": proxies[0]})
@@ -159,6 +168,7 @@ def fetch_stock_data(session, product_data, stock_url):
     logging.debug("Stock data successfully retrieved.")
     return stock_data
 
+
 def process_products_with_or_without_stock_data(product_list, stock_data):
     """Process products and match them with stock data if available."""
     if stock_data:
@@ -187,6 +197,14 @@ def process_products_with_or_without_stock_data(product_list, stock_data):
         logging.error(f"Error storing products in the database: {e}")
 
 
+def send_telegram_message(message):
+    """Sends a message to the specified Telegram chat."""
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except Exception as e:
+        logging.error(f"Error sending message to Telegram: {e}")
+
+
 def main():
     """Main function to fetch and process product data from the API."""
     start_time = time.time()
@@ -195,7 +213,7 @@ def main():
 
     # Create session and handle API request
     session = create_session()
-    product_data = api_request(session, product_url)
+    product_data = api_request(session, PRODUCT_URL)
 
     # Extract and validate "items", and process product data in one go
     available_items = product_data.get("items")
@@ -211,7 +229,7 @@ def main():
             product_list.append(validated_product)
 
     # Fetch stock data for products
-    stock_data = fetch_stock_data(session, product_data, stock_url)
+    stock_data = fetch_stock_data(session, product_data, STOCK_URL)
 
     # Process products and store them to the database with or without stock data
     process_products_with_or_without_stock_data(product_list, stock_data)
