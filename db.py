@@ -30,6 +30,7 @@ def initialize_db():
                 active BOOLEAN,
                 b2c_upc TEXT,
                 primaryFullImageURL TEXT,
+                url TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
@@ -47,7 +48,7 @@ def has_product_changed(product):
         cursor.execute("""
         SELECT brand, displayName, inStockQuantity, orderableQuantity, listPrice, 
                b2c_proof, b2c_size, stockStatus, lastModifiedDate, 
-               shippable, active, b2c_upc, primaryFullImageURL
+               shippable, active, b2c_upc, primaryFullImageURL, url
         FROM products WHERE id = ?
         """, (product.id,))
 
@@ -60,7 +61,7 @@ def has_product_changed(product):
         existing_data = dict(zip(
             ["brand", "displayName", "inStockQuantity", "orderableQuantity", "listPrice",
              "b2c_proof", "b2c_size", "stockStatus", "lastModifiedDate",
-             "shippable", "active", "b2c_upc", "primaryFullImageURL"], existing_product
+             "shippable", "active", "b2c_upc", "primaryFullImageURL", "url"], existing_product
         ))
 
         for key, value in existing_data.items():
@@ -76,8 +77,12 @@ def update_or_insert_product(product):
         with sqlite3.connect('products.db') as conn:
             cursor = conn.cursor()
 
+            # Prepends the base url to the image link to fix it
             if product.primaryFullImageURL and not product.primaryFullImageURL.startswith(base_url):
                 product.primaryFullImageURL = base_url + product.primaryFullImageURL
+
+            # Generates a link to the individual product as a new attribute url
+            product.url = base_url + "/product/" + product.id
 
             product_status = has_product_changed(product)
 
@@ -86,13 +91,13 @@ def update_or_insert_product(product):
                 INSERT INTO products (
                     id, brand, displayName, inStockQuantity, orderableQuantity, listPrice, 
                     b2c_proof, b2c_size, stockStatus, lastModifiedDate, 
-                    shippable, active, b2c_upc, primaryFullImageURL
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    shippable, active, b2c_upc, primaryFullImageURL, url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     product.id, product.brand, product.displayName, product.inStockQuantity,
                     product.orderableQuantity, product.listPrice, product.b2c_proof,
                     product.b2c_size, product.stockStatus, product.lastModifiedDate,
-                    product.shippable, product.active, product.b2c_upc, product.primaryFullImageURL
+                    product.shippable, product.active, product.b2c_upc, product.primaryFullImageURL, product.url
                 ))
                 conn.commit()
 
@@ -103,12 +108,11 @@ def update_or_insert_product(product):
                     f"📦 In Stock: {product.inStockQuantity}\n"
                     f"💰 Price: ${product.listPrice}\n"
                     f"🛒 Orderable Quantity: {product.orderableQuantity}\n"
-                    f"🔗 [View Product]({product.primaryFullImageURL})"
+                    f"🔗 [View Product]({product.url})"
                 )
 
                 send_telegram_message(message)
                 logging.info(f"New product added: {product.displayName}")
-
 
             elif product_status == "changed":
                 cursor.execute("""
@@ -116,13 +120,13 @@ def update_or_insert_product(product):
                     brand = ?, displayName = ?, inStockQuantity = ?, orderableQuantity = ?, 
                     listPrice = ?, b2c_proof = ?, b2c_size = ?, stockStatus = ?, 
                     lastModifiedDate = ?, shippable = ?, active = ?, b2c_upc = ?, 
-                    primaryFullImageURL = ? WHERE id = ?
+                    primaryFullImageURL = ?, url = ? WHERE id = ?
                 """, (
                     product.brand, product.displayName, product.inStockQuantity,
                     product.orderableQuantity, product.listPrice, product.b2c_proof,
                     product.b2c_size, product.stockStatus, product.lastModifiedDate,
                     product.shippable, product.active, product.b2c_upc,
-                    product.primaryFullImageURL, product.id
+                    product.primaryFullImageURL, product.url, product.id
                 ))
                 conn.commit()
                 logging.info(f"Updated product: {product.displayName}")
@@ -185,6 +189,7 @@ def fetch_and_print_products():
                 print(f"Active: {row[11]}")
                 print(f"B2C UPC: {row[12]}")
                 print(f"Primary Image URL: {row[13]}")
+                print(f"URL: {row[14]}")
                 print("-" * 50)  # Separator for better readability
 
         except sqlite3.Error as e:
