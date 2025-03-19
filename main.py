@@ -57,17 +57,6 @@ def check_proxy(proxy):
     return False
 
 
-def load_proxies_from_file(file_path):
-    """Loads proxy addresses from a .txt file."""
-    try:
-        with open(file_path, 'r') as f:
-            proxies = [line.strip() for line in f.readlines() if line.strip()]
-    except FileNotFoundError:
-        logging.error(f"Proxy file {file_path} not found.")
-        return []
-    return proxies
-
-
 def save_proxies_to_file(file_path, proxies):
     """Saves the list of proxies back to the .txt file."""
     with open(file_path, 'w') as f:
@@ -75,37 +64,39 @@ def save_proxies_to_file(file_path, proxies):
             f.write(f"{proxy}\n")
 
 
-def validate_and_clean_proxies(proxy_file_path):
-    """Validate proxies and remove dead ones from the proxy file."""
-    proxies = load_proxies_from_file(proxy_file_path)
-    valid_proxies = []
+def get_valid_proxies(file_path):
+    """Loads proxies from a file, validates them, and returns only the working ones."""
+    try:
+        with open(file_path, 'r') as f:
+            proxies = [line.strip() for line in f.readlines() if line.strip()]
+    except FileNotFoundError:
+        logging.error(f"Proxy file {file_path} not found.")
+        return []
 
-    for proxy in proxies:
-        if check_proxy(proxy):
-            valid_proxies.append(proxy)
-        else:
-            logging.warning(f"Removing dead proxy: {proxy}")
+    valid_proxies = [proxy for proxy in proxies if check_proxy(proxy)]
 
-    save_proxies_to_file(proxy_file_path, valid_proxies)
+    # Save only the working proxies back to the file
+    with open(file_path, 'w') as f:
+        for proxy in valid_proxies:
+            f.write(f"{proxy}\n")
+
     logging.info(f"Proxy file updated. {len(valid_proxies)} valid proxies remaining.")
+    return valid_proxies
 
 
 def create_session():
-    """Creates a session with TLS client and configures proxy."""
+    """Creates a session with TLS client and configures proxy if available."""
     session = tls_client.Session(client_identifier="chrome_120", random_tls_extension_order=True)
 
     if not proxy_file_path:
-        logging.error("PROXY_FILE environment variable is not set. Running without a proxy.")
+        logging.warning("PROXY_FILE environment variable is not set. Running without a proxy.")
         return session
 
-    # Validate and clean proxies before loading them
-    validate_and_clean_proxies(proxy_file_path)
-    proxies = load_proxies_from_file(proxy_file_path)
+    proxies = get_valid_proxies(proxy_file_path)
 
     if proxies:
-        proxy = proxies[0]  # Use the first valid proxy
-        session.proxies.update({"http": proxy, "https": proxy})
-        logging.info(f"Using proxy: {proxy}")
+        session.proxies.update({"http": proxies[0], "https": proxies[0]})
+        logging.info(f"Using proxy: {proxies[0]}")
     else:
         logging.warning("No valid proxies found. Running without a proxy.")
 
@@ -113,11 +104,12 @@ def create_session():
 
 
 def api_request(session: tls_client.Session, url, max_retries=3, delay=5):
-    """Fetches API data with retry logic for handling slow responses."""
+    """Fetches API data with retry logic for handling slow responses and specific HTTP status codes."""
     for attempt in range(max_retries):
         try:
             logging.debug(f"Fetching data from {url}... (Attempt {attempt + 1})")
             resp = session.get(url)
+
             # Check if the response status code is in the 2xx range (success)
             if 200 <= resp.status_code < 300:
                 try:
@@ -125,11 +117,23 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5):
                 except ValueError:
                     logging.error(f"Failed to decode JSON response. Response Text: {resp.text}")
                     return None
+            elif resp.status_code == 503:  # Service Unavailable
+                logging.warning(f"Service unavailable (503). Retrying in {delay} seconds...")
+                time.sleep(delay)
+            elif resp.status_code == 403:  # Forbidden
+                logging.error(f"Access forbidden (403). Check your proxy settings or permissions.")
+                break
             else:
-                logging.error(f"Received non-success status code {resp.status_code}")
+                logging.error(f"Received non-success status code {resp.status_code}. Retrying...")
 
+        except requests.exceptions.Timeout:
+            logging.error(f"Timeout error while accessing {url}. Retrying in {delay} seconds...")
+            time.sleep(delay)
+        except requests.exceptions.ConnectionError:
+            logging.error(f"Connection error while accessing {url}. Retrying in {delay} seconds...")
+            time.sleep(delay)
         except Exception as e:
-            logging.error(f"Error fetching API data: {e}")
+            logging.error(f"Unexpected error while accessing {url}: {e}")
             if attempt < max_retries - 1:
                 logging.warning(f"Attempt {attempt + 1} failed. Retrying in {delay} seconds...")
                 time.sleep(delay)
