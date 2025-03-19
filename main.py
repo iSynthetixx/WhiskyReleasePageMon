@@ -193,10 +193,8 @@ def main():
     initialize_logging()
     initialize_db()
 
-    # Create the session and handle the API request, including validation and transformation in one step
+    # Create session and handle API request
     session = create_session()
-
-    # Make the API request and directly handle the response
     product_data = api_request(session, product_url)
 
     # Extract and validate "items", and process product data in one go
@@ -212,15 +210,16 @@ def main():
         if validated_product is not None:
             product_list.append(validated_product)
 
-    # Fetch stock data for products returned from API query of specific page
+    # Fetch stock data for products
     stock_data = fetch_stock_data(session, product_data, stock_url)
 
-    # Process products and stores them to the database with or without stock data
+    # Process products and store them to the database with or without stock data
     process_products_with_or_without_stock_data(product_list, stock_data)
 
     # End time tracking and print the execution time
     elapsed_time = time.time() - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
+
 
 
 if __name__ == "__main__":
