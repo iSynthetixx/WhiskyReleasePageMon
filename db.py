@@ -1,7 +1,4 @@
 import sqlite3
-import logging
-import os
-from dotenv import load_dotenv
 from telegram_utils import *
 
 load_dotenv()  # Load the .env file
