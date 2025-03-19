@@ -103,7 +103,7 @@ def create_session():
     return session
 
 
-def api_request(session: tls_client.Session, url, max_retries=3, delay=5):
+def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backoff_factor=2):
     """Fetches API data with retry logic for handling slow responses and specific HTTP status codes."""
     for attempt in range(max_retries):
         try:
@@ -136,7 +136,7 @@ def api_request(session: tls_client.Session, url, max_retries=3, delay=5):
             logging.error(f"Unexpected error while accessing {url}: {e}")
             if attempt < max_retries - 1:
                 logging.warning(f"Attempt {attempt + 1} failed. Retrying in {delay} seconds...")
-                time.sleep(delay)
+                time.sleep(delay * backoff_factor)
 
     logging.error("Max retries reached. Exiting.")
     return None
@@ -150,7 +150,6 @@ def main():
     session = create_session()
     product_list = []
     product_data = api_request(session, product_url)
-
 
     # Ensure "items" key exists in the response and is a list type and is not empty or None
     if "items" not in product_data or not isinstance(product_data["items"], list) or not product_data["items"]:
@@ -170,7 +169,6 @@ def main():
             logging.error("No 'items' found in the stock data response or invalid format.")
     else:
         logging.error("No Product ID's parsed from 'items' or invalid format. Stock levels will be unavailable.")
-
 
     # Process each item in the product data
     for item in product_data["items"]:
@@ -195,7 +193,10 @@ def main():
             continue
 
     # Store the products in the database
-    store_products_to_db(product_list)
+    try:
+        store_products_to_db(product_list)
+    except Exception as e:
+        logging.error(f"Error storing products in the database: {e}")
 
     # End time tracking and print the execution time
     end_time = time.time()
