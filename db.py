@@ -2,7 +2,6 @@ import sqlite3
 import logging
 
 
-# Function to initialize the database
 def initialize_db():
     """Initializes the SQLite database and creates the necessary table if it doesn't exist."""
     conn = sqlite3.connect('products.db')
@@ -31,7 +30,6 @@ def initialize_db():
     conn.close()
 
 
-# Function to check if product has changed
 def has_product_changed(product):
     """Checks if the product values have changed by comparing with the database."""
     conn = sqlite3.connect('products.db')
@@ -82,7 +80,6 @@ def has_product_changed(product):
     return False  # No changes
 
 
-# Function to update or insert a product into the database
 def update_or_insert_product(product):
     """Updates an existing product or inserts a new one into the database."""
     conn = sqlite3.connect('products.db')
@@ -126,7 +123,6 @@ def update_or_insert_product(product):
     conn.close()
 
 
-# Function to store a list of products in the database
 def store_products_to_db(product_list):
     """Stores the products in the list to the database."""
     for product in product_list:
@@ -136,7 +132,6 @@ def store_products_to_db(product_list):
             logging.error(f"Error storing product {product.displayName} to the database: {e}")
 
 
-# Function to delete a product from the database
 def delete_product(product_id):
     """Deletes a product from the database based on its ID."""
     conn = sqlite3.connect('products.db')

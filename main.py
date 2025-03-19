@@ -150,9 +150,6 @@ def main():
     start_time = time.time()
     initialize_logging()
     initialize_db()
-    # Call the function to print the products from the database
-    # fetch_and_print_products()
-
     product_list = []
     session = create_session()
     product_data = api_request(session, product_url)
@@ -201,28 +198,12 @@ def main():
                     continue
                 # Append the validated product to the product list
                 product_list.append(new_product)
-                # Add the new product to the database
-                # update_or_insert_product(new_product)
-                # this is called as a batch outside the loop for efficiency
             except ValidationError as e:
                 logging.error(f"Error parsing item: {e}")
                 continue
 
     # Store the products in the database
     store_products_to_db(product_list)
-
-    '''
-    # Print all successfully parsed products
-    try:
-        for idx, prod in enumerate(product_list, start=1):
-            logging.info(f"Product {idx}: {prod.displayName} - ID {prod.id} - {prod.x_volume} mL - "
-                         f"${prod.listPrice} - {prod.inStockQuantity} units available.")
-    except Exception as e:
-        logging.error(f"Error while printing product details: {e}")
-    '''
-
-    # Call the function to print the products from the database
-    # fetch_and_print_products()
 
     # End time tracking and print the execution time
     end_time = time.time()
