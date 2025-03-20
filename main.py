@@ -95,7 +95,7 @@ def create_session():
         session.proxies.update({"http": proxies[0], "https": proxies[0]})
         logging.info(f"Using proxy: {proxies[0]}")
     else:
-        logging.warning("No valid proxies found. Running without a proxy.")
+        logging.debug("No valid proxies found. Running without a proxy.")
 
     return session
 
