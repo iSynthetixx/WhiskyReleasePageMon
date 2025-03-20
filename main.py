@@ -86,7 +86,7 @@ def create_session():
     session = tls_client.Session(client_identifier="chrome_120", random_tls_extension_order=True)
 
     if not PROXY_FILE_PATH:
-        logging.warning("PROXY_FILE environment variable is not set. Running without a proxy.")
+        logging.debug("PROXY_FILE environment variable is not set. Running without a proxy.")
         return session
 
     proxies = handle_proxies(PROXY_FILE_PATH)
