@@ -5,25 +5,48 @@ import logging
 import colorlog
 from logging.handlers import RotatingFileHandler
 import time
-from pydantic import ValidationError
-from models import ItemModel
 import requests
 from db import *
 from telegram import Bot
 
 # Load environment variables from .env file
 load_dotenv()
+
 # Access the environment variables
 PRODUCT_URL = os.getenv("PRODUCT_URL")
+CATEGORY_ID = os.getenv("CATEGORY_ID")
+ITEM_QUERY_LIMIT = os.getenv("ITEM_QUERY_LIMIT")
+
+# Ensure the item limit is an integer
+try:
+    ITEM_QUERY_LIMIT = int(ITEM_QUERY_LIMIT)
+except ValueError:
+    logging.error(f"Invalid ITEM_QUERY_LIMIT value: {ITEM_QUERY_LIMIT}. It should be an integer.")
+    # Set a default value in case of error
+    ITEM_QUERY_LIMIT = 250
+
 STOCK_URL = os.getenv("STOCK_URL")
 LOG_FILE_PATH = os.getenv("LOG_FILE_PATH")
 PROXY_FILE_PATH = os.getenv("PROXY_FILE_PATH")
 
+EXPECTED_PRODUCT_KEYS = {
+    "id": "Unknown", "brand": "Unknown", "active": "Unknown", "displayName": "Unknown",
+    "primaryFullImageURL": "Unknown", "b2c_highlyAllocatedProduct": None,
+    "x_volume": "Unknown", "listPrice": "Unknown",
+    "onlineOnly": "Unknown", "creationDate": "Unknown", "b2c_onlineAvailable": "Unknown",
+    "b2c_onlineExclusive": "Unknown", "lastModifiedDate": "Unknown", "b2c_size": "Unknown",
+    "b2c_proof": "Unknown", "b2c_futuresProduct": "Unknown", "b2c_comingSoon": "Unknown",
+    "repositoryId": "Unknown", "b2c_type": "Unknown"
+}
+
+EXPECTED_STOCK_KEYS = {
+    "preOrderableQuantity": "Unknown",
+    "orderableQuantity": "Unknown", "stockStatus": "Unknown", "availabilityDate": "Unknown", "backOrderableQuantity": "Unknown",
+    "inStockQuantity": "Unknown"
+}
+
 # Initialize the Telegram Bot
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
-# tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-# tmp = requests.get(tmp_url).json()
-
 
 def initialize_logging():
     """Configures the logging setup to log to both console and file with rotation."""
@@ -46,7 +69,6 @@ def initialize_logging():
     )
     file_handler.setFormatter(log_formatter)
     logging.basicConfig(level=logging.INFO, handlers=[console_handler, file_handler])
-
 
 def handle_proxies(file_path):
     """Handles loading, validating, and saving proxies."""
@@ -80,7 +102,6 @@ def handle_proxies(file_path):
 
     return valid_proxies
 
-
 def create_session():
     """Creates a session with TLS client and configures proxy if available."""
     session = tls_client.Session(client_identifier="chrome_120", random_tls_extension_order=True)
@@ -99,100 +120,138 @@ def create_session():
 
     return session
 
-
-def api_request(session: tls_client.Session, url, max_retries=3, delay=5, backoff_factor=2):
-    """Fetches API data with retry logic for handling slow responses and specific HTTP status codes."""
-    for attempt in range(max_retries):
+def _fetch_json(session, url, retries, max_retries, delay, backoff_factor):
+    """Fetch and return JSON response with retry handling."""
+    while retries < max_retries:
         try:
-            logging.debug(f"Fetching data from {url}... (Attempt {attempt + 1})")
             resp = session.get(url)
-
-            # Check if the response status code is in the 2xx range (success)
-            if 200 <= resp.status_code < 300:
-                try:
-                    return resp.json()  # Ensure response is valid JSON
-                except ValueError:
-                    logging.error(f"Failed to decode JSON response. Response Text: {resp.text}")
-                    return None
-            elif resp.status_code == 503:  # Service Unavailable
-                logging.warning(f"Service unavailable (503). Retrying in {delay} seconds...")
-                time.sleep(delay)
-            elif resp.status_code == 403:  # Forbidden
-                logging.error(f"Access forbidden (403). Check your proxy settings or permissions.")
-                break
+            if resp.status_code == 200:
+                return resp.json()
+            elif resp.status_code in {503, 429}:  # Retry on service unavailable or rate limit
+                logging.warning(f"Retrying {url} due to {resp.status_code} (Attempt {retries+1})")
+            elif resp.status_code == 403:
+                logging.error("Access forbidden (403). Check your proxy settings or permissions.")
+                return None
             else:
-                logging.error(f"Received non-success status code {resp.status_code}. Retrying...")
+                logging.error(f"Unexpected status code {resp.status_code}. Retrying...")
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            logging.error(f"{type(e).__name__} while accessing {url}. Retrying...")
 
-        except requests.exceptions.Timeout:
-            logging.error(f"Timeout error while accessing {url}. Retrying in {delay} seconds...")
-            time.sleep(delay)
-        except requests.exceptions.ConnectionError:
-            logging.error(f"Connection error while accessing {url}. Retrying in {delay} seconds...")
-            time.sleep(delay)
-        except Exception as e:
-            logging.error(f"Unexpected error while accessing {url}: {e}")
-            if attempt < max_retries - 1:
-                logging.warning(f"Attempt {attempt + 1} failed. Retrying in {delay} seconds...")
-                time.sleep(delay * backoff_factor)
+        retries += 1
+        time.sleep(delay)
+        delay *= backoff_factor  # Exponential backoff
 
-    logging.error("Max retries reached. Exiting.")
+    logging.error(f"Max retries reached for {url}.")
     return None
 
+def product_api_request(session: tls_client.Session, product_url: str, category_id: str, item_limit: int,
+                        offset: int = 0, max_retries: int = 3, delay: int = 5, backoff_factor: int = 2):
+    """Fetch and validate product data with retry logic and return a dictionary where the key is the product id."""
 
-def fetch_stock_data(session, product_data, stock_url):
-    """Fetches stock data for products based on product IDs in the product data."""
-    """product data is a json response from the api."""
+    # Initialize an empty dictionary
+    product_data = {}
 
-    # Fetch stock data for products
-    product_ids = [item["id"] for item in product_data.get("items", [])]
+    while True:
+        search_url = f"{product_url}{category_id}&limit={item_limit}&offset={offset}"
+        json_data = _fetch_json(session, search_url, retries=0, max_retries=max_retries, delay=delay, backoff_factor=backoff_factor)
 
-    if not product_ids:
-        logging.error("No valid Product IDs found in 'items'. Stock levels will be unavailable.")
-        return None  # Return None if no product IDs are available
+        if not json_data:
+            return None  # Exit if no valid data is retrieved
 
-    logging.debug(f"Successfully parsed {len(product_ids)} Product IDs.")
-    stock_url_current = f"{stock_url},{','.join(product_ids)}"
-    stock_data = api_request(session, stock_url_current)
+        items = json_data.get("items", [])
+        if not items:
+            return None  # Exit if no items are found
 
-    # Handle missing or malformed stock data
-    if stock_data is None:
-        logging.error("Failed to retrieve stock data!")
-        return None
-    elif not isinstance(stock_data.get("items"), list):
-        logging.error("No 'items' found in the stock data response or invalid format.")
-        return None
+        # Create a dictionary with id as key and the item as the value
+        for item in items:
+            item_id = item.get("id")
+            # if item_id:
+                # all_data[item_id] = item  # Add item to dictionary with id as key
+            if item_id:
+                # Extract only necessary data using expected keys
+                product_data[item_id] = {
+                    key: item.get(key, default) for key, default in EXPECTED_PRODUCT_KEYS.items()
+                }
 
-    logging.debug("Stock data successfully retrieved.")
-    return stock_data
+        if offset + item_limit >= json_data.get("totalResults", 0):
+            return product_data  # Return the dictionary of products once all data is fetched
+
+        offset += item_limit
 
 
-def process_products_with_or_without_stock_data(product_list, stock_data):
-    """Process products and match them with stock data if available."""
-    if stock_data:
-        # Continue processing stock data
-        for new_product in product_list:
-            try:
-                # Match each product with stock data
-                for stock_item in stock_data.get("items", []):
-                    if new_product.id in stock_item:
-                        if "productSkuInventoryDetails" in stock_item and stock_item["productSkuInventoryDetails"]:
-                            new_product.__dict__.update(stock_item["productSkuInventoryDetails"][0])
-                        else:
-                            logging.warning(f"No inventory details found for product ID: {new_product.id}")
-                        break
-            except ValidationError as e:
-                logging.error(f"Error parsing stock levels: {e}")
+def stock_api_request(session: tls_client.Session, stock_url: str, product_data, item_limit: int,
+                      offset: int = 0, max_retries: int = 3, delay: int = 5, backoff_factor: int = 2):
+    """Fetch and validate product data with retry logic and return a dictionary with all expected attributes,
+    but flattening 'productSkuInventoryStatus' into 'id' and 'totalStock'."""
+
+    stock_data = {}
+    product_ids = list(product_data.keys())
+
+    while True:
+        batch_ids = product_ids[offset:offset + item_limit]
+        stock_url_current = f"{stock_url}?productIds=" + ",".join(batch_ids)
+        json_data = _fetch_json(session, stock_url_current, retries=0, max_retries=max_retries, delay=delay,
+                                backoff_factor=backoff_factor)
+
+        if not json_data or "items" not in json_data:
+            return None
+
+        items = json_data["items"]
+
+        if not items:
+            return None
+
+        for i, item in enumerate(items):
+            if not item:
+                logging.debug(f"Skipping empty item: {batch_ids[i]} in stock data response.")
                 continue
 
-    else:
-        logging.warning("Stock data is unavailable, proceeding with available product data only.")
+            # Extract 'id' and 'totalStock' from 'productSkuInventoryStatus'
+            inventory_status = item.get("productSkuInventoryStatus", {})
+            if inventory_status:
+                item_id, total_stock = next(iter(inventory_status.items()))
+
+                # Preserve all expected stock attributes while flattening 'productSkuInventoryStatus'
+                stock_data[item_id] = {
+                    "id": item_id,
+                    "totalStock": total_stock,
+                    **{
+                        key: item.get(
+                            key,
+                            item.get("productSkuInventoryDetails", [{}])[0].get(key,
+                            item.get("productSkuInventoryStatus", {}).get(key, default))
+                        )
+                        for key, default in EXPECTED_STOCK_KEYS.items()
+                    }
+                }
+
+        if offset + item_limit >= len(product_ids):
+            return stock_data
+
+        offset += item_limit
+
+
+
+def process_products_with_or_without_stock_data(product_data, stock_data):
+    """Process products and match them with stock data if available."""
+
+    for product in product_data:
+        try:
+            # Look up the matching stock item using the product's id
+            stock_item = stock_data.get(product)
+
+            if stock_item:
+                # Update the product with stock details if available
+                product_data[product].update(stock_item)
+
+        except Exception as e:
+            logging.error(f"Error processing product {product}: {e}")
 
     # Store the products in the database
     try:
-        store_products_to_db(product_list)
+        store_products_to_db(product_data)
     except Exception as e:
         logging.error(f"Error storing products in the database: {e}")
-
 
 def main():
     """Main function to fetch and process product data from the API."""
@@ -202,32 +261,18 @@ def main():
 
     # Create session and handle API request
     session = create_session()
-    product_data = api_request(session, PRODUCT_URL)
 
-    # Extract and validate "items", and process product data in one go
-    available_items = product_data.get("items")
-    if not available_items:
-        logging.warning("No 'items' found in the product data response or invalid format.")
-        return
+    product_data = product_api_request(session, PRODUCT_URL, CATEGORY_ID, ITEM_QUERY_LIMIT)
 
-    # Validate, transform product data, and store them in product_list
-    product_list = []
-    for item in available_items:
-        validated_product = ItemModel.model_validate(item)
-        if validated_product is not None:
-            product_list.append(validated_product)
-
-    # Fetch stock data for products
-    stock_data = fetch_stock_data(session, product_data, STOCK_URL)
+    # Fetch stock data for all products
+    stock_data = stock_api_request(session, STOCK_URL, product_data, ITEM_QUERY_LIMIT)
 
     # Process products and store them to the database with or without stock data
-    process_products_with_or_without_stock_data(product_list, stock_data)
+    process_products_with_or_without_stock_data(product_data, stock_data)
 
     # End time tracking and print the execution time
     elapsed_time = time.time() - start_time
     logging.info(f"Execution completed in {elapsed_time:.2f} seconds.")
-
-
 
 if __name__ == "__main__":
     main()
