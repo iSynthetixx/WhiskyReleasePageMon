@@ -110,22 +110,20 @@ def update_or_insert_product(product):
         with sqlite3.connect('products.db') as conn:
             cursor = conn.cursor()
 
-            # Ensure the following remains a string
-            product['active'] = str(product.get('active', ""))
-            product['onlineOnly'] = str(product.get('onlineOnly', ""))
-            product['availabilityDate'] = str(product.get('availabilityDate', ""))
-            product['b2c_limitPerOrder'] = str(product.get('b2c_limitPerOrder', ""))
+            # Ensure the following remains a string before change detection
+            for key in ["active", "onlineOnly", "availabilityDate", "b2c_limitPerOrder"]:
+                product[key] = str(product.get(key, ""))
 
-            # Prepends the base URL to the image link to fix it
+            # Prepend the base URL to the image link if needed
             if product.get('primaryFullImageURL') and not product['primaryFullImageURL'].startswith(base_url):
                 product['primaryFullImageURL'] = base_url + product['primaryFullImageURL']
 
-            # Generates a link to the individual product as a new attribute URL
-            product['url'] = base_url + "/product/" + product['id']
+            # Generate a link to the individual product
+            product['url'] = f"{base_url}/product/{product['id']}"
 
+            # Detect if product has changed before inserting or updating
             product_status = has_product_changed(product)
 
-            # Check the product status and insert or update the product accordingly
             if product_status == "new":
                 cursor.execute(f"""
                 INSERT INTO products (
@@ -134,7 +132,23 @@ def update_or_insert_product(product):
                 ) VALUES ({', '.join('?' for _ in PRODUCT_ATTRIBUTES)}, CURRENT_TIMESTAMP, ?)
                 """, (*[product.get(key) for key in PRODUCT_ATTRIBUTES], product['url']))
                 conn.commit()
-                logging.info(f"New product added: {product['displayName']}")
+                logging.info(f"New product added: {product['displayName']}. "
+                             f"In Stock: {product['inStockQuantity']}. "
+                             f"Price: ${product['listPrice']}. "
+                             f"Orderable Quantity: {product['orderableQuantity']}.")
+
+                message = (
+                    f"🆕 *New Product Added!*\n"
+                    f"📌 *{product['displayName']}*\n"
+                    f"🏷️ Brand: {product['brand']}\n"
+                    f"📦 In Stock: {product['inStockQuantity']}\n"
+                    f"💰 Price: ${product['listPrice']}\n"
+                    f"🛒 Orderable Quantity: {product['orderableQuantity']}\n"
+                    f"🔗 [View Product]({product['url']})"
+                )
+
+                # Sends a telegram message to the group chat
+                send_telegram_message(message, TELEGRAM_GROUP_CHAT_ID)
 
             elif product_status == "changed":
                 cursor.execute(f"""
@@ -153,6 +167,7 @@ def update_or_insert_product(product):
         logging.error(f"Database error while updating product {product['displayName']}: {e}")
     except Exception as e:
         logging.error(f"Unexpected error in update_or_insert_product: {e}")
+
 
 
 def store_products_to_db(product_list):
