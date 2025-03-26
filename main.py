@@ -16,6 +16,7 @@ load_dotenv()
 PRODUCT_URL = os.getenv("PRODUCT_URL")
 CATEGORY_ID = os.getenv("CATEGORY_ID")
 ITEM_QUERY_LIMIT = os.getenv("ITEM_QUERY_LIMIT")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN ")
 
 # Ensure the item limit is an integer
 try:
