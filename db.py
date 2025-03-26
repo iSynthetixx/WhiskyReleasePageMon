@@ -135,7 +135,7 @@ def update_or_insert_product(product):
     except sqlite3.Error as e:
         logging.error(f"Database error while updating product {product.displayName}: {e}")
     except Exception as e:
-        logging.error(f"Unexpected error in update_or_insert_product(). Product {product.displayName}: {e}")
+        logging.error(f"Unexpected error in update_or_insert_product(). Product: {product.displayName}: {e}")
 
 
 def store_products_to_db(product_list):
