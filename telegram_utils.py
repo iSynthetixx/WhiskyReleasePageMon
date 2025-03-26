@@ -30,7 +30,18 @@ def send_telegram_message(message, chat_id):
 
     try:
         response = requests.post(url, json=payload)
-        if response.status_code != 200:
-            logging.error(f"Failed to send Telegram message: {response.text}")
+        response_json = response.json()
+
+        if response.status_code != 200 or not response_json.get("ok", False):
+            error_description = response_json.get("description", "Unknown error")
+            error_code = response_json.get("error_code", "No error code")
+
+            if error_code == 400 and "not enough rights" in error_description.lower():
+                logging.error(
+                    "ERROR - Bot lacks permissions to send messages to the chat. Please check bot permissions.")
+            else:
+                logging.error(f"Failed to send Telegram message: {response_json}")
+    except requests.RequestException as e:
+        logging.error(f"Network error while sending Telegram message: {e}")
     except Exception as e:
-        logging.error(f"Error sending Telegram message: {e}")
+        logging.error(f"Unexpected error sending Telegram message: {e}")
