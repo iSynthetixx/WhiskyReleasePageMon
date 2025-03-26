@@ -171,20 +171,6 @@ def delete_product(product_id):
         conn.commit()
 
 
-def delete_product(product_id):
-    """Deletes a product from the database based on its ID."""
-    with sqlite3.connect('products.db') as conn:
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
-        if cursor.rowcount > 0:
-            logging.warning(f"Product: {product_id} deleted from the database.")
-        else:
-            logging.warning(f"Product: {product_id} not found in the database.")
-
-        conn.commit()
-
-
 def fetch_and_print_products():
     """Fetches and prints all products from the database."""
     with sqlite3.connect('products.db') as conn:
