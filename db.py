@@ -18,12 +18,12 @@ PRODUCT_ATTRIBUTES = {
     "b2c_proof": None, "b2c_futuresProduct": None, "b2c_comingSoon": None,
     "repositoryId": None, "b2c_type": None,
     # Stock attributes
-    "productSkuInventoryStatus": None, "preOrderableQuantity": None,
+    "preOrderableQuantity": None,
     "orderableQuantity": None, "stockStatus": None, "availabilityDate": None, "backOrderableQuantity": None,
     "inStockQuantity": None,
-    "totalStock": None,  # Added totalStock attribute
-    # Added url attribute
-    "url": None
+    "totalStock": None,
+    "url": None,
+    "b2c_limitPerOrder": None
 }
 
 
@@ -55,7 +55,6 @@ def initialize_db():
                 b2c_comingSoon TEXT,
                 repositoryId TEXT,
                 b2c_type TEXT,
-                productSkuInventoryStatus TEXT,
                 preOrderableQuantity TEXT,
                 orderableQuantity TEXT,
                 stockStatus TEXT,
@@ -64,6 +63,7 @@ def initialize_db():
                 inStockQuantity TEXT,
                 totalStock TEXT,
                 url TEXT,
+                b2c_limitPerOrder TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
@@ -92,7 +92,13 @@ def has_product_changed(product):
         existing_data = dict(zip(PRODUCT_ATTRIBUTES.keys(), existing_product))
 
         for key, value in existing_data.items():
-            if value != product.get(key):
+            # Ensure string comparison
+            db_value = str(value) if value is not None else ""
+            # Default to empty string
+            api_value = str(product.get(key, ""))
+            if db_value != api_value:
+                logging.info(f"Product {product['displayName']} attribute {key} has changed "
+                             f"from {db_value} to {api_value}.")
                 return "changed"
 
         return "no_change"
@@ -103,6 +109,12 @@ def update_or_insert_product(product):
     try:
         with sqlite3.connect('products.db') as conn:
             cursor = conn.cursor()
+
+            # Ensure the following remains a string
+            product['active'] = str(product.get('active', ""))
+            product['onlineOnly'] = str(product.get('onlineOnly', ""))
+            product['availabilityDate'] = str(product.get('availabilityDate', ""))
+            product['b2c_limitPerOrder'] = str(product.get('b2c_limitPerOrder', ""))
 
             # Prepends the base URL to the image link to fix it
             if product.get('primaryFullImageURL') and not product['primaryFullImageURL'].startswith(base_url):

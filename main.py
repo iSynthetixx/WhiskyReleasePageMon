@@ -12,6 +12,11 @@ from telegram import Bot
 # Load environment variables from .env file
 load_dotenv()
 
+# Initialize the Telegram Bot
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
+# tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+# tmp = requests.get(tmp_url).json()
+
 # Access the environment variables
 PRODUCT_URL = os.getenv("PRODUCT_URL")
 CATEGORY_ID = os.getenv("CATEGORY_ID")
@@ -37,7 +42,7 @@ EXPECTED_PRODUCT_KEYS = {
     "onlineOnly": "Unknown", "creationDate": "Unknown", "b2c_onlineAvailable": "Unknown",
     "b2c_onlineExclusive": "Unknown", "lastModifiedDate": "Unknown", "b2c_size": "Unknown",
     "b2c_proof": "Unknown", "b2c_futuresProduct": "Unknown", "b2c_comingSoon": "Unknown",
-    "repositoryId": "Unknown", "b2c_type": "Unknown"
+    "repositoryId": "Unknown", "b2c_type": "Unknown", "b2c_limitPerOrder": "Unknown"
 }
 
 EXPECTED_STOCK_KEYS = {
@@ -46,8 +51,7 @@ EXPECTED_STOCK_KEYS = {
     "inStockQuantity": "Unknown"
 }
 
-# Initialize the Telegram Bot
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
+
 
 def initialize_logging():
     """Configures the logging setup to log to both console and file with rotation."""
@@ -190,7 +194,7 @@ def stock_api_request(session: tls_client.Session, stock_url: str, product_data,
 
     while True:
         batch_ids = product_ids[offset:offset + item_limit]
-        stock_url_current = f"{stock_url}?productIds=" + ",".join(batch_ids)
+        stock_url_current = f"{stock_url}" + ",".join(batch_ids)
         json_data = _fetch_json(session, stock_url_current, retries=0, max_retries=max_retries, delay=delay,
                                 backoff_factor=backoff_factor)
 
