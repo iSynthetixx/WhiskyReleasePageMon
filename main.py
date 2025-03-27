@@ -12,16 +12,31 @@ from telegram import Bot
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize the Telegram Bot
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-# tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-# tmp = requests.get(tmp_url).json()
+# Required environment variables
+REQUIRED_ENV_VARS = [
+    "PRODUCT_URL", "CATEGORY_ID", "ITEM_QUERY_LIMIT", "STOCK_URL", "LOG_FILE_PATH", "PROXY_FILE_PATH", "TELEGRAM_BOT_TOKEN"
+]
+
+def validate_env_vars():
+    """Ensures all required environment variables are set."""
+    missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+    if missing_vars:
+        logging.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        exit(1)  # Exit script if required variables are missing
+    logging.info("All required environment variables are set.")
 
 # Access the environment variables
 PRODUCT_URL = os.getenv("PRODUCT_URL")
 CATEGORY_ID = os.getenv("CATEGORY_ID")
 ITEM_QUERY_LIMIT = os.getenv("ITEM_QUERY_LIMIT")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN ")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+# Initialize the Telegram Bot
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
+# tmp_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+# tmp = requests.get(tmp_url).json()
+
+
 
 # Ensure the item limit is an integer
 try:
